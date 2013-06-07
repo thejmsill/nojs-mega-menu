@@ -1,0 +1,10 @@
+name = No-JS mega Menu
+description = This provides a non-javascript mega menu.
+core = 7.x
+package = Other
+php = 5.2.4
+version = 7.x-1.0
+project = soe_menus
+dependencies[] = ctools
+dependencies[] = menu
+dependencies[] = panels

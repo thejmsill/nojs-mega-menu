@@ -1,0 +1,163 @@
+<?php
+/**
+ * @file
+ * Code for the soe menus feature.
+ */
+
+// include_once 'nojs_mega_menu.features.inc';
+
+function nojs_mega_menu_init() {
+  drupal_add_css(drupal_get_path('module', 'nojs_mega_menu') . '/css/nojs_mega_menu.base.css');
+}
+
+/**
+ * Implements hook_form_alter().
+ *
+ * Adds a select element to assign a mini panel as a mega menu.
+ */
+function nojs_mega_menu_form_alter(&$form, &$form_state, $form_id) {
+    // dpm($form);
+  if ($form_id == 'menu_edit_item') {
+    $args = $form_state['build_info']['args'];
+    if ($args[0] == 'add') {
+      if ($args[2]['menu_name'] != 'menu-soe-primary-menu') {
+        return;
+      }
+    }
+    elseif ($args[0] == 'edit') {
+      if ($args[1]['menu_name'] != 'menu-soe-primary-menu') {
+        return;
+      }
+    }
+    else {
+      return;
+    }
+
+    if (module_exists('panels_mini')) {
+      $mlid = NULL;
+      if (isset($args[1])) {
+        $mlid = $args[1]['mlid'];
+      }
+
+      $mini_panels = panels_mini_load_all();
+      $options = array(0 => t('- None -'));
+      foreach ($mini_panels as $key => $mini_panel) {
+        $options[$mini_panel->name] = $mini_panel->admin_title;
+      }
+
+      $form['nojs_mega_menu_mega_menu'] = array(
+        '#type' => 'select',
+        '#title' => t('Mega menu'),
+        '#description' => t('Select a <a href="@url">Mini Panel</a> which will populate the Mega Menu for this menu item.', array('@url' => url('admin/structure/mini-panels'))),
+        '#default_value' => nojs_mega_menu_get_default_mini_panel($mlid),
+        '#options' => $options,
+      );
+      $form['#submit'][] = 'nojs_mega_menu_mega_menu_submit';
+    }
+  }
+}
+
+/**
+ * Saves or updates the soe mega menu value.
+ */
+function nojs_mega_menu_mega_menu_submit($form, &$form_state) {
+  $mlid = $form_state['values']['mlid'];
+  $mini_panel = $form_state['input']['nojs_mega_menu_mega_menu'];
+  $mini_panels = variable_get('soe_menu_mega_menus', array());
+  if ($mini_panel == '0') {
+    unset($mini_panels[$mlid]);
+  }
+  else {
+    $mini_panels[$mlid] = $mini_panel;
+  }
+  variable_set('soe_menu_mega_menus', $mini_panels);
+}
+
+/**
+ * Function to return matching Mini Panel name for a Menu Link ID.
+ *
+ * @param string $mlid
+ *   Menu Link ID to check Mini Panel name for.
+ * @return
+ *   Returns matching Mini Panel name for a Menu Link ID if available. Returns
+ *   NULL if not.
+ */
+function nojs_mega_menu_get_default_mini_panel($mlid) {
+  $mini_panels = variable_get('soe_menu_mega_menus', array());
+  if (isset($mini_panels[$mlid]) && $mlid !== NULL) {
+    return $mini_panels[$mlid];
+  }
+  else {
+    return NULL;
+  }
+}
+
+/**
+ * Implements hook_menu_link_delete().
+ */
+function nojs_mega_menu_menu_link_delete($item) {
+  $mlid = $item['mlid'];
+  $mini_panels = variable_get('soe_menu_mega_menus', array());
+  if (isset($mini_panels[$mlid])) {
+    unset($mini_panels[$mlid]);
+    variable_set('soe_menu_mega_menus', $mini_panels);
+  }
+}
+
+/**
+ * Implements hook_preprocess_hook().
+ */
+function nojs_mega_menu_preprocess_menu_link(&$variables) {
+  if ($variables['element']['#theme']['3'] == 'menu_link__menu_soe_primary_menu') {
+    $mlid = $variables['element']['#original_link']['mlid'];
+    $mini_panel = _nojs_mega_menu_get_panel($mlid);
+    if ($mini_panel) {
+      $variables['element']['#below'] = array(
+        '#markup' => '<div class="main-menu-mega-menu">' . $mini_panel . '</div>',
+      );
+      $variables['element']['#attributes']['class'][] = 'has-mega-menu';
+    }
+  }
+}
+
+/**
+ * Returns Mini Panel based on Menu Link ID.
+ *
+ * @param string $mlid
+ *   Menu Link ID
+ * @return
+ *   Returns rendered Mini Panel
+ */
+function _nojs_mega_menu_get_panel($mlid) {
+  $mini_panel_name = nojs_mega_menu_get_default_mini_panel($mlid);
+  if ($mini_panel_name) {
+    $mini_panel = panels_mini_load($mini_panel_name);
+    // @TODO: disabled panels still get rendered. Probably shouldn't get
+    // rendered, but also not get removed from mapping.
+    if ($mini_panel) {
+      return panels_render_display($mini_panel->display);
+    }
+    else {
+      _nojs_mega_menu_unset_panel($mini_panel_name);
+    }
+  }
+  else {
+    return NULL;
+  }
+}
+
+/**
+ * Unsets a Mini Panel from the mapping variable.
+ *
+ * @param string $mini_panel
+ *   Mini Panel to remove from mapping.
+ */
+function _nojs_mega_menu_unset_panel($mini_panel_name) {
+  $mini_panels = variable_get('soe_menu_mega_menus', array());
+  foreach ($mini_panels as $mlid => $mini_panel) {
+    if ($mini_panel == $mini_panel_name) {
+      unset($mini_panels[$mlid]);
+    }
+  }
+  variable_set('soe_menu_mega_menus', $mini_panels);
+}
